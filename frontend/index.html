@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      viewport meta tag: makes the app look correct on mobile screens.
+      width=device-width  → use the device's actual screen width
+      initial-scale=1.0   → don't zoom in/out by default
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Todo App — Python + React</title>
+  </head>
+  <body>
+    <!--
+      This is the ONLY HTML element React needs.
+      React will inject your entire app inside this <div>.
+      
+      How it works:
+        1. Browser loads this HTML file
+        2. Browser finds <script type="module" src="/src/main.jsx">
+        3. Vite serves main.jsx to the browser
+        4. main.jsx tells React to render the App component into #root
+        5. React fills in the <div id="root"> with your components
+    -->
+    <div id="root"></div>
+
+    <!--
+      type="module" is required for modern JavaScript (ES Modules).
+      It tells the browser this file uses import/export syntax.
+    -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

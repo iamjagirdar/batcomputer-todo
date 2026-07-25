@@ -1,0 +1,330 @@
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ════════════════════════════════════════════
+   DARK THEME  (Batman Night — default)
+════════════════════════════════════════════ */
+:root {
+  --bg:           #080808;
+  --surface:      #111111;
+  --card:         #161616;
+  --border:       #252525;
+  --accent:       #f5c518;
+  --accent-dim:   #b8920f;
+  --text-hi:      #ffffff;
+  --text-mid:     #999999;
+  --text-lo:      #3a3a3a;
+  --danger:       #ef4444;
+  --hero-opacity: 0.16;
+  --lamp-bg:      #1a1a1a;
+  --lamp-knob:    #f5c518;
+  --lamp-glow:    rgba(245,197,24,0.55);
+  --lamp-wire:    #444;
+  --card-shadow:  0 4px 24px rgba(0,0,0,0.6);
+}
+
+/* ════════════════════════════════════════════
+   LIGHT THEME  (Bruce Wayne Daylight — Refined)
+════════════════════════════════════════════ */
+html.light {
+  --bg:           #f8f9fa;
+  --surface:      #e9ecef;
+  --card:         #ffffff;
+  --border:       #dee2e6;
+  --accent:       #d4a017;
+  --accent-dim:   #b8860b;
+  --text-hi:      #212529;
+  --text-mid:     #6c757d;
+  --text-lo:      #adb5bd;
+  --danger:       #dc3545;
+  --hero-opacity: 0.06;
+  --lamp-bg:      #f1f3f5;
+  --lamp-knob:    #d4a017;
+  --lamp-glow:    rgba(212,160,23,0.4);
+  --lamp-wire:    #868e96;
+  --card-shadow:  0 2px 12px rgba(0,0,0,0.08);
+}
+
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text-hi);
+  font-family: 'Rajdhani', sans-serif;
+  min-height: 100vh;
+  transition: background 0.4s ease, color 0.3s ease;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; }
+
+/* ════════════════════════════════════════════
+   LAMP SWITCH  — the hero toggle
+════════════════════════════════════════════ */
+.lamp-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The vertical wire from top */
+.lamp-wire {
+  width: 2px;
+  height: 28px;
+  background: var(--lamp-wire);
+  border-radius: 1px;
+  transition: background 0.3s;
+}
+
+/* Lamp shade shape */
+.lamp-shade {
+  width: 54px;
+  height: 0;
+  border-left: 22px solid transparent;
+  border-right: 22px solid transparent;
+  border-top: 32px solid var(--lamp-bg);
+  filter: drop-shadow(0 -2px 6px var(--lamp-glow));
+  transition: border-top-color 0.3s, filter 0.3s;
+  position: relative;
+  box-shadow: inset 0 -4px 8px rgba(0,0,0,0.1);
+}
+
+/* Bright bulb circle below shade */
+.lamp-bulb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 18px 6px var(--lamp-glow), 0 0 40px 10px var(--lamp-glow);
+  transition: background 0.3s, box-shadow 0.3s;
+  margin-top: -4px;
+  position: relative;
+  z-index: 1;
+}
+
+/* OFF state — lamp is dark */
+.lamp-wrap.off .lamp-bulb {
+  background: var(--text-lo);
+  box-shadow: 0 0 4px rgba(0,0,0,0.2);
+}
+.lamp-wrap.off .lamp-shade {
+  border-top-color: var(--surface);
+  filter: none;
+}
+
+/* Cone of light below the bulb (only when ON) */
+.lamp-cone {
+  width: 0;
+  height: 0;
+  border-left:  30px solid transparent;
+  border-right: 30px solid transparent;
+  border-top:   50px solid rgba(245,197,24,0.07);
+  margin-top: -2px;
+  transition: opacity 0.4s;
+}
+.lamp-wrap.off .lamp-cone { opacity: 0; }
+.lamp-wrap.on  .lamp-cone { opacity: 1; }
+
+/* Label under lamp */
+.lamp-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-lo);
+  margin-top: 6px;
+  transition: color 0.3s;
+}
+.lamp-wrap:hover .lamp-label { color: var(--accent); }
+
+/* Flicker animation when turning ON */
+@keyframes lampFlicker {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.9; }
+  30%  { opacity: 0.3; }
+  50%  { opacity: 1; }
+  60%  { opacity: 0.5; }
+  80%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+.lamp-wrap.flicker .lamp-bulb {
+  animation: lampFlicker 0.5s ease forwards;
+}
+
+/* ════════════════════════════════════════════
+   HERO BACKGROUND  (local Gotham image)
+════════════════════════════════════════════ */
+.hero-bg {
+  position: fixed;
+  inset: 0;
+  background-image: url('/images/gotham-bg.jpg');
+  background-size: cover;
+  background-position: center center;
+  opacity: var(--hero-opacity);
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* Gradient overlay so content is readable */
+.hero-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--bg) 0%,
+    rgba(255,255,255,0) 25%,
+    rgba(255,255,255,0) 75%,
+    var(--bg) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+  transition: background 0.4s;
+}
+
+/* Light mode — stronger white vignette */
+html.light .hero-overlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(248,249,250,0.95) 0%,
+    rgba(248,249,250,0.7) 25%,
+    rgba(248,249,250,0.7) 75%,
+    rgba(248,249,250,0.95) 100%
+  );
+}
+
+/* ════════════════════════════════════════════
+   CARDS & INPUTS
+════════════════════════════════════════════ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s, background 0.3s;
+}
+.card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--card-shadow);
+  transform: translateY(-1px);
+}
+
+.input-line {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-hi);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  width: 100%;
+  padding-bottom: 5px;
+  outline: none;
+  transition: border-color 0.2s, color 0.3s;
+}
+.input-line::placeholder { color: var(--text-lo); }
+.input-line:focus { border-color: var(--accent); }
+
+.input-sub {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-mid);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  width: 100%;
+  padding-bottom: 4px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input-sub::placeholder { color: var(--text-lo); }
+.input-sub:focus { border-color: var(--accent); }
+
+/* ── Deploy button ── */
+.deploy-btn {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #000;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 16px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  box-shadow: 0 0 20px var(--lamp-glow);
+  transition: background 0.2s, box-shadow 0.2s, opacity 0.2s, transform 0.1s;
+}
+.deploy-btn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  transform: translateY(-1px);
+  box-shadow: 0 0 30px var(--lamp-glow);
+}
+.deploy-btn:active:not(:disabled) { transform: translateY(0); }
+.deploy-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* ── Filter pills ── */
+.pill {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 8px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-lo);
+  transition: all 0.2s;
+}
+.pill:hover      { border-color: var(--text-mid); color: var(--text-mid); }
+.pill.active     { background: var(--accent); border-color: var(--accent); color: #000; }
+
+/* ── Progress fill ── */
+.prog-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+  box-shadow: 0 0 8px var(--lamp-glow);
+  transition: width 0.5s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Animations ── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slideUp 0.3s ease forwards; }
+
+@keyframes titleFlicker {
+  0%,90%,100% { opacity: 1; }
+  91%  { opacity: 0.7; }
+  93%  { opacity: 1; }
+  96%  { opacity: 0.5; }
+}
+.title-flicker { animation: titleFlicker 8s infinite; }
+
+@keyframes spinAnim { to { transform: rotate(360deg); } }
+.spin { animation: spinAnim 1s linear infinite; }
+
+/* ── Bat signal ring (decorative) ── */
+.bat-signal-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  opacity: 0.08;
+  pointer-events: none;
+  animation: ringPulse 3s ease-in-out infinite;
+}
+@keyframes ringPulse {
+  0%,100% { transform: scale(1);   opacity: 0.08; }
+  50%     { transform: scale(1.06); opacity: 0.14; }
+}

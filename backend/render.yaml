@@ -1,0 +1,19 @@
+# ============================================================
+#  render.yaml — Render.com Deployment Config (Backend)
+# ============================================================
+#
+#  This tells Render how to deploy your Python FastAPI backend.
+#  Place this file in the root of your repo OR backend folder.
+# ============================================================
+
+services:
+  - type: web
+    name: batcomputer-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
