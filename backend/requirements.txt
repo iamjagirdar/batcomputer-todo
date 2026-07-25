@@ -4,10 +4,8 @@
 # This file lists all the Python packages this project needs.
 # Install them all at once with:
 #   pip install -r requirements.txt
-#
-# Think of this like a shopping list for Python packages.
 # ============================================================
 
-fastapi==0.111.0        # The web framework for building our API
-uvicorn[standard]==0.30.1  # The server that runs FastAPI (like a waiter serving requests)
-pydantic==2.7.1         # Data validation — ensures data has the right shape/types
+fastapi==0.115.0        # The web framework for building our API
+uvicorn[standard]==0.30.1  # The server that runs FastAPI
+pydantic==2.9.2         # Data validation — pre-built wheels available for Python 3.11+
