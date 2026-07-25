@@ -36,8 +36,8 @@ from fastapi.middleware.cors import CORSMiddleware
 ALLOWED_ORIGINS = [
     "http://localhost:5173",          # Local development
     "http://localhost:3000",          # Alternative local port
-    # Add your production frontend URL here after deploying to Vercel:
-    # "https://your-app-name.vercel.app",
+    "https://frontend-five-phi-39.vercel.app",  # Production frontend
+    "https://*.vercel.app",           # All Vercel preview URLs
 ]
 
 # 'uuid' generates unique IDs for each todo (like "abc123-def456-...")
