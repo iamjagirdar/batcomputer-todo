@@ -3,10 +3,11 @@ import { Zap, AlignLeft, Plus, Mic, Loader2 } from 'lucide-react'
 import VoiceRecorder from './VoiceRecorder'
 
 export default function TodoForm({ onAdd, onVoiceNote }) {
-  const [title, setTitle]         = useState('')
-  const [description, setDesc]    = useState('')
-  const [listening, setListening] = useState(false)
+  const [title, setTitle]           = useState('')
+  const [description, setDesc]      = useState('')
+  const [listening, setListening]   = useState(false)
   const [voiceError, setVoiceError] = useState(null)
+  const [voiceTitle, setVoiceTitle] = useState('')  // title for voice note todo
   const recognitionRef = useRef(null)
 
   const handleSubmit = (e) => {
@@ -17,19 +18,17 @@ export default function TodoForm({ onAdd, onVoiceNote }) {
     setDesc('')
   }
 
-  // Voice-to-text (fills input)
+  // Voice-to-text (fills title input)
   const startVoiceToText = () => {
     setVoiceError(null)
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) { setVoiceError('Not supported in this browser. Try Chrome.'); return }
-
+    if (!SpeechRecognition) { setVoiceError('Not supported. Use Chrome.'); return }
     if (listening) { recognitionRef.current?.stop(); setListening(false); return }
 
     const recognition = new SpeechRecognition()
     recognition.lang = 'en-US'
     recognition.interimResults = false
     recognitionRef.current = recognition
-
     recognition.onstart  = () => setListening(true)
     recognition.onresult = (e) => {
       const t = e.results[0][0].transcript
@@ -45,6 +44,15 @@ export default function TodoForm({ onAdd, onVoiceNote }) {
     recognition.start()
   }
 
+  const handleVoiceSend = (blob) => {
+    if (onVoiceNote) {
+      onVoiceNote(blob, voiceTitle || title || 'Voice Note', description || null)
+      setVoiceTitle('')
+      setTitle('')
+      setDesc('')
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="mb-8">
       <div className="card p-5">
@@ -58,20 +66,23 @@ export default function TodoForm({ onAdd, onVoiceNote }) {
             value={title}
             onChange={e => setTitle(e.target.value)}
             className="input-line"
-            required
           />
           <button
             type="button"
             onClick={startVoiceToText}
             className={`mic-btn ${listening ? 'mic-active' : ''}`}
-            title={listening ? 'Stop' : 'Speak to fill title'}
+            title={listening ? 'Stop listening' : 'Speak to fill title'}
             aria-label="Voice to text"
           >
             {listening ? <Loader2 size={15} className="spin" /> : <Mic size={15} />}
           </button>
         </div>
 
-        {voiceError && <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 10, paddingLeft: 30 }}>{voiceError}</p>}
+        {voiceError && (
+          <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 10, paddingLeft: 30 }}>
+            {voiceError}
+          </p>
+        )}
 
         {listening && (
           <div className="voice-listening">
@@ -94,12 +105,18 @@ export default function TodoForm({ onAdd, onVoiceNote }) {
           />
         </div>
 
-        {/* Voice note recorder */}
-        <div style={{ marginBottom: 16 }}>
-          <VoiceRecorder onSend={(blob) => onVoiceNote && onVoiceNote(blob, title, description)} />
+        {/* Divider */}
+        <div style={{ height: 1, background: 'var(--border)', marginBottom: 14 }} />
+
+        {/* Voice note section */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <VoiceRecorder onSend={handleVoiceSend} />
+          <span style={{ fontSize: 11, color: 'var(--text-lo)', letterSpacing: 1 }}>
+            — or type a mission below
+          </span>
         </div>
 
-        {/* Submit */}
+        {/* Submit text todo */}
         <button type="submit" disabled={!title.trim()} className="deploy-btn">
           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <Plus size={15} strokeWidth={3} />

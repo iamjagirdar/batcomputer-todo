@@ -36,6 +36,12 @@ export default function VoiceRecorder({ onSend }) {
   // ── Start recording ──────────────────────────────────────────
   const startRecording = async () => {
     try {
+      // Check if MediaRecorder is supported at all
+      if (!window.MediaRecorder) {
+        alert('Voice recording is not supported in this browser. Please use Chrome or Firefox.')
+        return
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
 
@@ -48,13 +54,15 @@ export default function VoiceRecorder({ onSend }) {
       analyserRef.current = analyser
 
       // Start MediaRecorder
-      const recorder = new MediaRecorder(stream, { mimeType: getSupportedMimeType() })
+      const mimeType = getSupportedMimeType()
+      const recorderOptions = mimeType ? { mimeType } : {}
+      const recorder = new MediaRecorder(stream, recorderOptions)
       mediaRecorderRef.current = recorder
       chunksRef.current = []
 
       recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.onstop = () => {
-        const mimeType = getSupportedMimeType()
+        const mimeType = recorder.mimeType || 'audio/webm'
         const blob = new Blob(chunksRef.current, { type: mimeType })
         audioBlobRef.current = blob
         audioRef.current = new Audio(URL.createObjectURL(blob))
@@ -87,8 +95,19 @@ export default function VoiceRecorder({ onSend }) {
   }
 
   const getSupportedMimeType = () => {
-    const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
-    return types.find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm'
+    // iOS Safari needs mp4, Android/Chrome prefer webm
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+      'audio/aac',
+      '',   // empty string = browser default
+    ]
+    for (const type of types) {
+      if (type === '' || MediaRecorder.isTypeSupported(type)) return type
+    }
+    return ''
   }
 
   const drawWaveform = () => {

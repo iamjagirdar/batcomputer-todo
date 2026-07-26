@@ -275,8 +275,9 @@ async def upload_voice_note(
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found.")
 
-    # Accept audio files only
-    if not file.content_type.startswith("audio/"):
+    # Accept audio files only — including all mobile formats
+    allowed = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/aac', 'audio/mpeg', 'audio/wav', 'audio/x-m4a']
+    if not any(file.content_type.startswith(a) for a in allowed):
         raise HTTPException(status_code=400, detail="Only audio files are allowed.")
 
     # Limit to 5MB

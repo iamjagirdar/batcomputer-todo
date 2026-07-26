@@ -130,8 +130,13 @@ export const deleteTodo = async (id) => {
  */
 export const uploadVoiceNote = async (todoId, audioBlob) => {
   const formData = new FormData()
-  // Use .webm extension — most common from MediaRecorder
-  formData.append('file', audioBlob, 'voice-note.webm')
+  // Determine extension from mime type for cross-browser compatibility
+  const mimeType = audioBlob.type || 'audio/webm'
+  const ext = mimeType.includes('mp4') ? 'mp4'
+            : mimeType.includes('ogg') ? 'ogg'
+            : mimeType.includes('aac') ? 'aac'
+            : 'webm'
+  formData.append('file', audioBlob, `voice-note.${ext}`)
   const { data } = await api.post(`/todos/${todoId}/voice`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })

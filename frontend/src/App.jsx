@@ -90,12 +90,16 @@ export default function App() {
   }
 
   const handleVoiceNote = async (audioBlob, title, description) => {
-    // Create todo first, then attach voice note
     try {
-      const t = await createTodo(title || 'Voice Note', description || null)
-      setTodos(p => [{ ...t, has_voice_note: true }, ...p])
+      // If no title provided, prompt user or use default
+      const todoTitle = title?.trim() || 'Voice Note'
+      const t = await createTodo(todoTitle, description || null)
+      // Upload voice note and update todo in state with has_voice_note flag
       await uploadVoiceNote(t.id, audioBlob)
-    } catch { setError('Failed to save voice note.') }
+      setTodos(p => [{ ...t, has_voice_note: true }, ...p])
+    } catch (err) {
+      setError('Failed to save voice note. Please try again.')
+    }
   }
 
   const handleToggle = async (id, completed) => {
