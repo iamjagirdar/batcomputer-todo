@@ -32,10 +32,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid — clear storage
+    // Only clear token on 401 if it's NOT an auth endpoint
+    // Auth endpoints returning 401 = wrong password, not expired token
+    const url = error.config?.url || ''
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register')
+    if (error.response?.status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('bat_token')
       localStorage.removeItem('bat_user')
+      window.location.reload()
     }
     return Promise.reject(error)
   }
