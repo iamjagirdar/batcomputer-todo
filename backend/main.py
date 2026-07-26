@@ -27,17 +27,36 @@ todos:    List[dict] = []   # [ todo_dict, ... ]
 # ── App ───────────────────────────────────────────────────────
 app = FastAPI(title="Batcomputer API", version="4.0.0")
 
-# Manual CORS — works 100% reliably
-@app.middleware("http")
-async def cors_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
-        response = JSONResponse(content={}, status_code=200)
-    else:
-        response = await call_next(request)
+# CORS headers on ALL responses including errors
+def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
     return response
+
+# Handle preflight OPTIONS requests
+@app.middleware("http")
+async def cors_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return add_cors_headers(JSONResponse(content={}, status_code=200))
+    response = await call_next(request)
+    return add_cors_headers(response)
+
+# CRITICAL: Also add CORS to HTTPException responses
+# Without this, 401/400/422 errors block the browser
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return add_cors_headers(JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    ))
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    return add_cors_headers(JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    ))
 
 
 # ── Pydantic schemas ──────────────────────────────────────────
