@@ -21,12 +21,9 @@ pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__roun
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # ── CORS ─────────────────────────────────────────────────────
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://frontend-five-phi-39.vercel.app",
-    "https://*.vercel.app",
-]
+# Allow all origins — safe for a learning/portfolio project
+# For production with sensitive data, list specific URLs instead
+ALLOWED_ORIGINS = ["*"]
 
 # ── App ───────────────────────────────────────────────────────
 app = FastAPI(title="Batcomputer API", version="2.0.0")
@@ -34,7 +31,7 @@ app = FastAPI(title="Batcomputer API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
