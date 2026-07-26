@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, Loader2, CheckCircle2, ListTodo, ShieldAlert, X } from 'lucide-react'
 import { getTodos, createTodo, updateTodo, deleteTodo } from './api'
-import TodoForm   from './components/TodoForm'
-import TodoItem   from './components/TodoItem'
-import LampToggle from './components/LampToggle'
+import { useAuth } from './context/AuthContext'
+import TodoForm    from './components/TodoForm'
+import TodoItem    from './components/TodoItem'
+import LampToggle  from './components/LampToggle'
+import UserProfile from './components/UserProfile'
+import LoginPage   from './pages/LoginPage'
 
-/* ── Batman SVG logo (used as decorative watermark) ── */
+/* ── Batman SVG logo ── */
 function BatLogo({ style = {} }) {
   return (
-    <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg"
-         style={style} aria-hidden="true">
+    <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg" style={style} aria-hidden="true">
       <path fill="currentColor"
         d="M100 18 C78 18 58 29 47 46 C37 29 16 23 7 34
            C1 40 7 57 24 57 C13 57 7 68 18 73
@@ -36,13 +38,7 @@ function StatCard({ label, value, Icon, accent }) {
       transition: 'background 0.3s, border-color 0.3s',
     }}>
       <Icon size={15} style={{ color: accent ? 'var(--accent)' : 'var(--text-lo)', margin: '0 auto 6px', display: 'block' }} />
-      <div style={{
-        fontFamily: "'Bebas Neue', sans-serif",
-        fontSize: 34,
-        lineHeight: 1,
-        color: accent ? 'var(--accent)' : 'var(--text-hi)',
-        transition: 'color 0.3s',
-      }}>
+      <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 34, lineHeight: 1, color: accent ? 'var(--accent)' : 'var(--text-hi)', transition: 'color 0.3s' }}>
         {value}
       </div>
       <div style={{ fontSize: 10, color: 'var(--text-lo)', letterSpacing: 2, textTransform: 'uppercase', marginTop: 5 }}>
@@ -56,31 +52,34 @@ function StatCard({ label, value, Icon, accent }) {
    MAIN APP
 ════════════════════════════════════════════ */
 export default function App() {
+  const { user, loading: authLoading } = useAuth()
+
   const [todos,   setTodos]   = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
   const [filter,  setFilter]  = useState('all')
   const [dark,    setDark]    = useState(true)
 
-  /* Apply theme to <html> element */
+  /* Apply theme */
   useEffect(() => {
     document.documentElement.classList.toggle('light', !dark)
   }, [dark])
 
-  /* Fetch todos once */
+  /* Fetch todos when user logs in */
   useEffect(() => {
+    if (!user) { setTodos([]); return }
     ;(async () => {
       try {
         setLoading(true)
         setError(null)
         setTodos(await getTodos())
       } catch {
-        setError('Cannot reach Python backend. Start it with: python main.py')
+        setError('Failed to load missions from Batcomputer.')
       } finally {
         setLoading(false)
       }
     })()
-  }, [])
+  }, [user])
 
   /* Handlers */
   const handleAdd = async (title, desc) => {
@@ -111,141 +110,106 @@ export default function App() {
   const done  = todos.filter(t => t.completed).length
   const pct   = total === 0 ? 0 : Math.round((done / total) * 100)
 
-  /* ── Render ── */
+  /* ── Show login if not authenticated ── */
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <Loader2 size={36} className="spin" style={{ color: 'var(--accent)' }} />
+      </div>
+    )
+  }
+
+  if (!user) return <LoginPage />
+
+  /* ── Main app (authenticated) ── */
   return (
     <>
-      {/* ── Full-page Batman background image ── */}
       <div className="hero-bg" />
       <div className="hero-overlay" />
 
-      {/* ── Page wrapper (above background layers) ── */}
       <div style={{ position: 'relative', zIndex: 2, minHeight: '100vh' }}>
-
-        {/* Top accent bar */}
         <div style={{ height: 3, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)' }} />
 
-        {/* ── LAMP at top-right ── */}
+        {/* ── Top bar: lamp + profile ── */}
         <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 32,
-          zIndex: 100,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
+          position: 'fixed', top: 0, left: 0, right: 0,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+          padding: '0 24px', zIndex: 100, pointerEvents: 'none',
         }}>
-          <LampToggle dark={dark} onToggle={() => setDark(d => !d)} />
+          {/* Profile — left */}
+          <div style={{ pointerEvents: 'all', paddingTop: 12 }}>
+            <UserProfile todoCount={total} doneCount={done} />
+          </div>
+          {/* Lamp — right */}
+          <div style={{ pointerEvents: 'all', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <LampToggle dark={dark} onToggle={() => setDark(d => !d)} />
+          </div>
         </div>
 
-        {/* ── Content container ── */}
-        <div style={{ maxWidth: 640, margin: '0 auto', padding: '50px 16px 70px' }}>
+        {/* ── Content ── */}
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '80px 16px 70px' }}>
 
           {/* ── HEADER ── */}
           <header style={{ textAlign: 'center', marginBottom: 44, position: 'relative' }}>
-
-            {/* Bat-signal decorative rings */}
             <div className="bat-signal-ring" style={{ width: 320, height: 320, top: '50%', left: '50%', marginTop: -160, marginLeft: -160 }} />
             <div className="bat-signal-ring" style={{ width: 220, height: 220, top: '50%', left: '50%', marginTop: -110, marginLeft: -110, animationDelay: '1.5s' }} />
 
-            {/* Batman image — actual DC Batman art via reliable CDN */}
             <div style={{ position: 'relative', marginBottom: 12 }}>
               <img
                 src="/images/batman-avatar.jpg"
                 alt="Batman"
                 style={{
-                  width: 100,
-                  height: 100,
-                  objectFit: 'cover',
-                  objectPosition: 'center top',
-                  borderRadius: '50%',
-                  border: '3px solid var(--accent)',
+                  width: 100, height: 100, objectFit: 'cover', objectPosition: 'center top',
+                  borderRadius: '50%', border: '3px solid var(--accent)',
                   boxShadow: `0 0 ${dark ? '24px' : '16px'} var(--lamp-glow)`,
-                  display: 'block',
-                  margin: '0 auto',
+                  display: 'block', margin: '0 auto',
                   filter: dark ? 'none' : 'saturate(0.7) brightness(1.1)',
                   transition: 'box-shadow 0.3s, filter 0.3s',
                 }}
                 onError={e => { e.target.style.display = 'none' }}
               />
-              {/* Bat logo overlay on the circular image */}
               <BatLogo style={{
-                position: 'absolute',
-                bottom: -6,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: 48,
-                height: 24,
-                color: 'var(--accent)',
+                position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+                width: 48, height: 24, color: 'var(--accent)',
                 filter: 'drop-shadow(0 0 6px var(--lamp-glow))',
               }} />
             </div>
 
-            {/* Title */}
-            <h1
-              className="title-flicker"
-              style={{
-                fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: 58,
-                letterSpacing: 10,
-                color: 'var(--accent)',
-                textShadow: dark 
-                  ? '0 0 40px rgba(245,197,24,0.5), 0 0 80px rgba(245,197,24,0.2)' 
-                  : '0 2px 4px rgba(0,0,0,0.08)',
-                lineHeight: 1,
-                transition: 'text-shadow 0.4s',
-              }}
-            >
+            <h1 className="title-flicker" style={{
+              fontFamily: "'Bebas Neue', sans-serif", fontSize: 58, letterSpacing: 10,
+              color: 'var(--accent)',
+              textShadow: dark ? '0 0 40px rgba(245,197,24,0.5), 0 0 80px rgba(245,197,24,0.2)' : '0 2px 4px rgba(0,0,0,0.08)',
+              lineHeight: 1, transition: 'text-shadow 0.4s',
+            }}>
               BATCOMPUTER
             </h1>
-            <p style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 12,
-              letterSpacing: 6,
-              color: 'var(--text-lo)',
-              textTransform: 'uppercase',
-              marginTop: 4,
-            }}>
-              Mission Control · Gotham City
+            <p style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 12, letterSpacing: 6, color: 'var(--text-lo)', textTransform: 'uppercase', marginTop: 4 }}>
+              Welcome back, {user.username} · Gotham City
             </p>
 
-            {/* Decorative divider with bat */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>
               <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent))', opacity: 0.3 }} />
               <BatLogo style={{ width: 30, height: 15, color: 'var(--accent)', opacity: 0.6 }} />
               <div style={{ flex: 1, height: 1, background: 'linear-gradient(270deg, transparent, var(--accent))', opacity: 0.3 }} />
             </div>
 
-            {/* Theme label */}
-            <p style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 11,
-              letterSpacing: 3,
-              color: 'var(--text-lo)',
-              marginTop: 10,
-            }}>
+            <p style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 11, letterSpacing: 3, color: 'var(--text-lo)', marginTop: 10 }}>
               {dark ? '— The Dark Knight —' : '— Bruce Wayne Mode —'}
             </p>
           </header>
 
-          {/* ── ERROR BANNER ── */}
+          {/* ── ERROR ── */}
           {error && (
             <div className="slide-up" style={{
-              background: 'rgba(239,68,68,0.08)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: 12,
-              padding: '12px 16px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              marginBottom: 24,
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: 12, padding: '12px 16px', display: 'flex',
+              justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 24,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <AlertTriangle size={15} color="#ef4444" />
                 <span style={{ color: '#ef4444', fontSize: 13 }}>{error}</span>
               </div>
-              <button onClick={() => setError(null)}
-                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }}>
+              <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }}>
                 <X size={14} />
               </button>
             </div>
@@ -254,27 +218,20 @@ export default function App() {
           {/* ── STATS ── */}
           {total > 0 && (
             <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-              <StatCard label="Total"     value={total}          Icon={ListTodo}     accent={false} />
-              <StatCard label="Active"    value={total - done}   Icon={ShieldAlert}  accent={total - done > 0} />
-              <StatCard label="Completed" value={done}           Icon={CheckCircle2} accent={done === total && total > 0} />
+              <StatCard label="Total"     value={total}        Icon={ListTodo}    accent={false} />
+              <StatCard label="Active"    value={total - done} Icon={ShieldAlert} accent={total - done > 0} />
+              <StatCard label="Completed" value={done}         Icon={CheckCircle2} accent={done === total && total > 0} />
             </div>
           )}
 
-          {/* ── PROGRESS BAR ── */}
+          {/* ── PROGRESS ── */}
           {total > 0 && (
             <div style={{ marginBottom: 24 }}>
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                fontSize: 10, letterSpacing: 2, textTransform: 'uppercase',
-                color: 'var(--text-lo)', marginBottom: 7,
-              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--text-lo)', marginBottom: 7 }}>
                 <span>Mission Progress</span>
                 <span style={{ color: 'var(--accent)' }}>{pct}%</span>
               </div>
-              <div style={{
-                height: 6, background: 'var(--surface)',
-                borderRadius: 999, border: '1px solid var(--border)', overflow: 'hidden',
-              }}>
+              <div style={{ height: 6, background: 'var(--surface)', borderRadius: 999, border: '1px solid var(--border)', overflow: 'hidden' }}>
                 <div className="prog-fill" style={{ width: `${pct}%` }} />
               </div>
             </div>
@@ -287,48 +244,31 @@ export default function App() {
           {total > 0 && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
               {['all', 'active', 'completed'].map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`pill${filter === f ? ' active' : ''}`}
-                >
-                  {f}
-                </button>
+                <button key={f} onClick={() => setFilter(f)} className={`pill${filter === f ? ' active' : ''}`}>{f}</button>
               ))}
             </div>
           )}
 
-          {/* ── TODO LIST ── */}
+          {/* ── LIST ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
             {loading && (
               <div style={{ textAlign: 'center', padding: '64px 0' }}>
                 <Loader2 size={30} className="spin" style={{ color: 'var(--accent)', margin: '0 auto 14px', display: 'block' }} />
-                <p style={{ color: 'var(--text-lo)', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase' }}>
-                  Accessing Batcomputer...
-                </p>
+                <p style={{ color: 'var(--text-lo)', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase' }}>Accessing Batcomputer...</p>
               </div>
             )}
-
             {!loading && total === 0 && (
               <div style={{ textAlign: 'center', padding: '64px 0' }}>
                 <BatLogo style={{ width: 90, height: 45, color: 'var(--accent)', opacity: 0.1, margin: '0 auto 16px', display: 'block' }} />
-                <p style={{ color: 'var(--text-mid)', fontSize: 12, letterSpacing: 3, textTransform: 'uppercase' }}>
-                  No Active Missions
-                </p>
-                <p style={{ color: 'var(--text-lo)', fontSize: 12, marginTop: 6, fontStyle: 'italic' }}>
-                  Gotham is safe... for now.
-                </p>
+                <p style={{ color: 'var(--text-mid)', fontSize: 12, letterSpacing: 3, textTransform: 'uppercase' }}>No Active Missions</p>
+                <p style={{ color: 'var(--text-lo)', fontSize: 12, marginTop: 6, fontStyle: 'italic' }}>Gotham is safe... for now.</p>
               </div>
             )}
-
             {!loading && total > 0 && filtered.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-lo)',
-                            fontSize: 11, letterSpacing: 3, textTransform: 'uppercase' }}>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-lo)', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase' }}>
                 No {filter} missions
               </div>
             )}
-
             {filtered.map(todo => (
               <TodoItem key={todo.id} todo={todo} onToggle={handleToggle} onDelete={handleDelete} />
             ))}
@@ -338,17 +278,10 @@ export default function App() {
           <footer style={{ marginTop: 56, textAlign: 'center' }}>
             <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.25, marginBottom: 20 }} />
             <BatLogo style={{ width: 28, height: 14, color: 'var(--accent)', opacity: 0.15, margin: '0 auto 10px', display: 'block' }} />
-            <p style={{ color: 'var(--text-lo)', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase' }}>
-              Python FastAPI · React · Tailwind CSS
-            </p>
-            <p style={{ color: 'var(--text-lo)', fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>
-              "I am the night." — Batman
-            </p>
+            <p style={{ color: 'var(--text-lo)', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase' }}>Python FastAPI · React · Tailwind CSS</p>
+            <p style={{ color: 'var(--text-lo)', fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>"I am the night." — Batman</p>
           </footer>
-
         </div>
-
-        {/* Bottom accent bar */}
         <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)' }} />
       </div>
     </>

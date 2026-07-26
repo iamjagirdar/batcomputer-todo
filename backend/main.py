@@ -1,275 +1,217 @@
 # ============================================================
-#  PYTHON LEARNING PROJECT - Todo List API
-#  Built with FastAPI — a modern Python web framework
-# ============================================================
-#
-# WHAT IS FastAPI?
-#   FastAPI is a Python library that lets you build web APIs.
-#   An API (Application Programming Interface) is basically a
-#   messenger between your frontend (React) and backend (Python).
-#   The frontend ASKS the backend for data, and the backend RESPONDS.
-#
-# HOW DOES IT WORK?
-#   1. User clicks "Add Todo" in React
-#   2. React sends an HTTP request to Python (e.g., POST /todos)
-#   3. Python receives it, saves the todo, and sends back a response
-#   4. React shows the updated list
+#  Batcomputer Todo API  — v2 with JWT Authentication
 # ============================================================
 
-# --- IMPORTS ---
-# 'fastapi' is the main framework we use to build our API
-from fastapi import FastAPI, HTTPException
-
-# 'pydantic' lets us define the shape/structure of our data
-# It also validates data automatically (e.g., title must be a string)
-from pydantic import BaseModel
-
-# 'typing' gives us tools like Optional (a value that can be None)
-from typing import Optional, List
-
-# 'fastapi.middleware.cors' allows our React app (on a different domain)
-# to talk to our Python backend — without this, browsers block the request
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
-
-# IMPORTANT: In production, add your Vercel URL here!
-# Example: "https://batcomputer-todo.vercel.app"
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",          # Local development
-    "http://localhost:3000",          # Alternative local port
-    "https://frontend-five-phi-39.vercel.app",  # Production frontend
-    "https://*.vercel.app",           # All Vercel preview URLs
-]
-
-# 'uuid' generates unique IDs for each todo (like "abc123-def456-...")
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 import uuid
 
+# ── Security config ──────────────────────────────────────────
+SECRET_KEY = "batcomputer-gotham-2024-ultra-secret-key-xK9mP2nQ"
+ALGORITHM  = "HS256"
+TOKEN_EXPIRE_HOURS = 24
 
-# ============================================================
-# STEP 1: Create the FastAPI app
-# ============================================================
-# Think of 'app' as the main controller of our backend.
-# All routes (URLs) are registered on this object.
-app = FastAPI(
-    title="Todo List API",
-    description="A beginner-friendly Python API for learning FastAPI",
-    version="1.0.0"
-)
+pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=4)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+# ── CORS ─────────────────────────────────────────────────────
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://frontend-five-phi-39.vercel.app",
+    "https://*.vercel.app",
+]
 
-# ============================================================
-# STEP 2: Enable CORS (Cross-Origin Resource Sharing)
-# ============================================================
-# By default, browsers block requests between different origins.
-# Our React app runs on http://localhost:5173
-# Our Python API runs on http://localhost:8000
-# These are DIFFERENT origins, so we must allow it explicitly.
+# ── App ───────────────────────────────────────────────────────
+app = FastAPI(title="Batcomputer API", version="2.0.0")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,  # Use the list defined above
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],   # Allow GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"],   # Allow all HTTP headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
+# ── In-memory storage ─────────────────────────────────────────
+# { email: { id, username, email, hashed_password } }
+users_db: dict = {}
+todos: List[dict] = []
 
-# ============================================================
-# STEP 3: Define our Data Model (Schema)
-# ============================================================
-# Pydantic models define the SHAPE of data we accept or return.
-# BaseModel is the parent class that gives us validation for free.
+
+# ── Pydantic models ───────────────────────────────────────────
+
+class UserRegister(BaseModel):
+    username: str
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserOut(BaseModel):
+    id: str
+    username: str
+    email: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserOut
 
 class TodoCreate(BaseModel):
-    """
-    This model defines what data we need when CREATING a new todo.
-    The client (React) must send a JSON body with these fields.
-    
-    Example JSON the frontend sends:
-    {
-        "title": "Buy groceries",
-        "description": "Milk, eggs, bread"
-    }
-    """
-    title: str                        # Required — must be a string
-    description: Optional[str] = None # Optional — defaults to None if not provided
-
+    title: str
+    description: Optional[str] = None
 
 class TodoUpdate(BaseModel):
-    """
-    This model is used when UPDATING an existing todo.
-    All fields are optional — you only send what you want to change.
-    
-    Example: just update the completed status:
-    { "completed": true }
-    """
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None
 
-
 class Todo(BaseModel):
-    """
-    This is the FULL todo object we store and return to the frontend.
-    It includes everything from TodoCreate PLUS id and completed.
-    """
-    id: str           # Unique identifier (generated by uuid)
-    title: str        # The todo title
-    description: Optional[str] = None  # Optional description
-    completed: bool = False            # Default: not completed
+    id: str
+    title: str
+    description: Optional[str] = None
+    completed: bool = False
+    user_id: str
 
 
-# ============================================================
-# STEP 4: In-Memory Database
-# ============================================================
-# For learning purposes, we store todos in a Python LIST.
-# In a real app, you'd use a database like PostgreSQL or SQLite.
-#
-# A list in Python: [item1, item2, item3]
-# We'll store Todo objects (dictionaries) here.
-todos: List[dict] = []
+# ── Auth helpers ──────────────────────────────────────────────
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+def create_token(email: str) -> str:
+    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    return jwt.encode({"sub": email, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+    """Extract + validate JWT — used as a dependency in protected routes."""
+    exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Session expired. Please log in again.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if not email:
+            raise exc
+    except JWTError:
+        raise exc
+    user = users_db.get(email)
+    if not user:
+        raise exc
+    return user
 
 
-# ============================================================
-# STEP 5: Define API Routes (Endpoints)
-# ============================================================
-# Routes are URLs that the frontend can call.
-# Each route has a METHOD (GET, POST, PUT, DELETE) and a PATH (/todos).
-#
-#  GET    /todos         → Fetch all todos
-#  POST   /todos         → Create a new todo
-#  PUT    /todos/{id}    → Update a specific todo
-#  DELETE /todos/{id}    → Delete a specific todo
+# ── Auth routes ───────────────────────────────────────────────
 
-
-# --- GET / (root) ---
 @app.get("/")
 def root():
-    """
-    The root endpoint — just a health check.
-    When you visit http://localhost:8000 in your browser, you see this.
-    
-    The @app.get("/") decorator tells FastAPI:
-    "When someone sends a GET request to '/', run this function."
-    """
-    return {"message": "Todo API is running! Visit /docs to explore."}
+    return {"message": "Batcomputer API v2 — /docs for interactive docs"}
+
+@app.get("/ping")
+def ping():
+    """Lightweight wake-up endpoint — call this first to wake Render from sleep"""
+    return {"status": "awake"}
 
 
-# --- GET /todos ---
+@app.post("/auth/register", response_model=Token, status_code=201)
+def register(data: UserRegister):
+    """Register a new user. Auto-logs them in by returning a token."""
+    if data.email in users_db:
+        raise HTTPException(status_code=400, detail="Email already registered.")
+    if len(data.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if len(data.username.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Username must be at least 2 characters.")
+
+    user = {
+        "id": str(uuid.uuid4()),
+        "username": data.username.strip(),
+        "email": data.email.lower().strip(),
+        "hashed_password": hash_password(data.password),
+    }
+    users_db[user["email"]] = user
+    token = create_token(user["email"])
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"id": user["id"], "username": user["username"], "email": user["email"]},
+    }
+
+
+@app.post("/auth/login", response_model=Token)
+def login(data: UserLogin):
+    """Login with email + password. Returns JWT token."""
+    user = users_db.get(data.email.lower().strip())
+    if not user or not verify_password(data.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    token = create_token(user["email"])
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"id": user["id"], "username": user["username"], "email": user["email"]},
+    }
+
+
+@app.get("/auth/me", response_model=UserOut)
+def get_me(current_user: dict = Depends(get_current_user)):
+    """Return current user info from token."""
+    return {"id": current_user["id"], "username": current_user["username"], "email": current_user["email"]}
+
+
+# ── Todo routes (all protected) ───────────────────────────────
+
 @app.get("/todos", response_model=List[Todo])
-def get_todos():
-    """
-    Returns ALL todos from our in-memory list.
-    
-    HTTP Method: GET  (used to READ/FETCH data)
-    URL: http://localhost:8000/todos
-    
-    response_model=List[Todo] means FastAPI will validate
-    the response matches the Todo shape before sending it.
-    """
-    return todos
+def get_todos(current_user: dict = Depends(get_current_user)):
+    return [t for t in todos if t["user_id"] == current_user["id"]]
 
 
-# --- POST /todos ---
 @app.post("/todos", response_model=Todo, status_code=201)
-def create_todo(todo_data: TodoCreate):
-    """
-    Creates a NEW todo and adds it to our list.
-    
-    HTTP Method: POST  (used to CREATE new data)
-    URL: http://localhost:8000/todos
-    Body: { "title": "...", "description": "..." }
-    
-    'todo_data: TodoCreate' — FastAPI automatically reads the
-    JSON body from the request and turns it into a TodoCreate object.
-    
-    status_code=201 means "201 Created" — the standard HTTP response
-    for successfully creating a resource.
-    """
-    # Create a new todo dictionary
+def create_todo(todo_data: TodoCreate, current_user: dict = Depends(get_current_user)):
     new_todo = {
-        "id": str(uuid.uuid4()),      # Generate a unique ID
+        "id": str(uuid.uuid4()),
         "title": todo_data.title,
         "description": todo_data.description,
-        "completed": False,            # New todos are always incomplete
+        "completed": False,
+        "user_id": current_user["id"],
     }
-    
-    # Append (add) it to our list
     todos.append(new_todo)
-    
-    # Return the newly created todo
     return new_todo
 
 
-# --- PUT /todos/{todo_id} ---
 @app.put("/todos/{todo_id}", response_model=Todo)
-def update_todo(todo_id: str, update_data: TodoUpdate):
-    """
-    Updates an EXISTING todo by its ID.
-    
-    HTTP Method: PUT  (used to UPDATE existing data)
-    URL: http://localhost:8000/todos/abc123
-    
-    {todo_id} is a PATH PARAMETER — it's part of the URL.
-    FastAPI extracts it automatically and passes it as 'todo_id'.
-    
-    We use a loop to find the todo with matching ID, then update it.
-    """
-    # Loop through all todos to find the one with matching id
+def update_todo(todo_id: str, update_data: TodoUpdate, current_user: dict = Depends(get_current_user)):
     for todo in todos:
-        if todo["id"] == todo_id:
-            # Only update fields that were actually provided
-            # .model_dump(exclude_unset=True) gives us only the fields
-            # the client actually sent (ignores fields set to None/default)
-            update_fields = update_data.model_dump(exclude_unset=True)
-            todo.update(update_fields)
+        if todo["id"] == todo_id and todo["user_id"] == current_user["id"]:
+            todo.update(update_data.model_dump(exclude_unset=True))
             return todo
-    
-    # If we get here, no todo with that ID was found
-    # HTTPException sends an error response back to the frontend
-    raise HTTPException(status_code=404, detail=f"Todo with id '{todo_id}' not found")
+    raise HTTPException(status_code=404, detail="Todo not found.")
 
 
-# --- DELETE /todos/{todo_id} ---
 @app.delete("/todos/{todo_id}", status_code=204)
-def delete_todo(todo_id: str):
-    """
-    Deletes a todo by its ID.
-    
-    HTTP Method: DELETE  (used to DELETE data)
-    URL: http://localhost:8000/todos/abc123
-    
-    status_code=204 means "204 No Content" — success but nothing to return.
-    
-    We use 'global todos' because we're reassigning the variable.
-    In Python, if you modify a list's contents (append, pop), you don't need
-    'global'. But if you REASSIGN it (todos = [...]), you do.
-    """
+def delete_todo(todo_id: str, current_user: dict = Depends(get_current_user)):
     global todos
-    
-    # Check if any todo has this ID
-    original_length = len(todos)
-    
-    # List comprehension: create a NEW list with only todos that DON'T match the id
-    # This effectively "removes" the matching todo
-    todos = [todo for todo in todos if todo["id"] != todo_id]
-    
-    # If the list length didn't change, the todo wasn't found
-    if len(todos) == original_length:
-        raise HTTPException(status_code=404, detail=f"Todo with id '{todo_id}' not found")
-    
-    # Return nothing (204 No Content)
+    before = len(todos)
+    todos = [t for t in todos if not (t["id"] == todo_id and t["user_id"] == current_user["id"])]
+    if len(todos) == before:
+        raise HTTPException(status_code=404, detail="Todo not found.")
     return None
 
 
-# ============================================================
-# STEP 6: Run the server
-# ============================================================
-# This block only runs when you execute this file directly:
-#   python main.py
-# It does NOT run when the file is imported by another module.
 if __name__ == "__main__":
     import uvicorn
-    # uvicorn is the server that runs our FastAPI app
-    # host="0.0.0.0" means accept connections from any IP
-    # port=8000 is the port number (http://localhost:8000)
-    # reload=True auto-restarts when you save the file (dev mode)
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
