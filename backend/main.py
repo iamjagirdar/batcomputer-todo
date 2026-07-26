@@ -1,5 +1,5 @@
 # ============================================================
-#  Batcomputer Todo API  — v3 with SQLite + JWT Auth
+#  Batcomputer Todo API  — v4 with JWT Auth + In-Memory Storage
 # ============================================================
 
 from fastapi import FastAPI, HTTPException, Depends, status, Request
@@ -10,29 +10,24 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
-
-# Local modules
-from database import engine, Base, get_db
-import models
-
-# ── Create all tables on startup ──────────────────────────────
-# This reads all models and creates their tables if they don't exist yet.
-# Safe to run multiple times — it won't overwrite existing data.
-Base.metadata.create_all(bind=engine)
+import uuid
 
 # ── Security ──────────────────────────────────────────────────
-SECRET_KEY          = "batcomputer-gotham-2024-ultra-secret-key-xK9mP2nQ"
-ALGORITHM           = "HS256"
-TOKEN_EXPIRE_HOURS  = 24 * 7  # 7 days
+SECRET_KEY         = "batcomputer-gotham-2024-ultra-secret-key-xK9mP2nQ"
+ALGORITHM          = "HS256"
+TOKEN_EXPIRE_HOURS = 24 * 7   # 7 days
 
 pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=4)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# ── CORS ──────────────────────────────────────────────────────
-app = FastAPI(title="Batcomputer API", version="3.0.0")
+# ── In-memory storage ─────────────────────────────────────────
+users_db: dict       = {}   # { email: user_dict }
+todos:    List[dict] = []   # [ todo_dict, ... ]
 
-# Handle CORS manually — most reliable approach
+# ── App ───────────────────────────────────────────────────────
+app = FastAPI(title="Batcomputer API", version="4.0.0")
+
+# Manual CORS — works 100% reliably
 @app.middleware("http")
 async def cors_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
@@ -45,7 +40,7 @@ async def cors_middleware(request: Request, call_next):
     return response
 
 
-# ── Pydantic schemas (request/response shapes) ────────────────
+# ── Pydantic schemas ──────────────────────────────────────────
 
 class UserRegister(BaseModel):
     username: str
@@ -60,8 +55,6 @@ class UserOut(BaseModel):
     id: str
     username: str
     email: str
-    class Config:
-        from_attributes = True
 
 class Token(BaseModel):
     access_token: str
@@ -83,27 +76,21 @@ class TodoOut(BaseModel):
     description: Optional[str] = None
     completed: bool
     user_id: str
-    class Config:
-        from_attributes = True
 
 
 # ── Auth helpers ──────────────────────────────────────────────
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+def hash_password(p: str) -> str:
+    return pwd_context.hash(p)
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 def create_token(email: str) -> str:
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    return jwt.encode({"sub": email, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+    exp = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    return jwt.encode({"sub": email, "exp": exp}, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> models.User:
-    """Validate JWT and return the current User object from DB."""
+def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Session expired. Please log in again.",
@@ -116,8 +103,7 @@ def get_current_user(
             raise exc
     except JWTError:
         raise exc
-
-    user = db.query(models.User).filter(models.User.email == email).first()
+    user = users_db.get(email)
     if not user:
         raise exc
     return user
@@ -127,128 +113,91 @@ def get_current_user(
 
 @app.get("/")
 def root():
-    return {"message": "Batcomputer API v3 with SQLite — /docs"}
+    return {"message": "Batcomputer API v4 — running!"}
 
 @app.get("/ping")
 def ping():
-    """Wake-up endpoint for Render free tier"""
     return {"status": "awake"}
 
 
 # ── Auth ──────────────────────────────────────────────────────
 
 @app.post("/auth/register", response_model=Token, status_code=201)
-def register(data: UserRegister, db: Session = Depends(get_db)):
-    """Register new user, auto-login by returning token"""
-    # Check duplicate email
-    if db.query(models.User).filter(models.User.email == data.email.lower()).first():
+def register(data: UserRegister):
+    if data.email.lower() in users_db:
         raise HTTPException(status_code=400, detail="Email already registered.")
     if len(data.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
     if len(data.username.strip()) < 2:
         raise HTTPException(status_code=400, detail="Username must be at least 2 characters.")
 
-    user = models.User(
-        id=str(__import__('uuid').uuid4()),
-        username=data.username.strip(),
-        email=data.email.lower().strip(),
-        hashed_password=hash_password(data.password),
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
+    user = {
+        "id":              str(uuid.uuid4()),
+        "username":        data.username.strip(),
+        "email":           data.email.lower().strip(),
+        "hashed_password": hash_password(data.password),
+    }
+    users_db[user["email"]] = user
     return {
-        "access_token": create_token(user.email),
-        "token_type": "bearer",
-        "user": {"id": user.id, "username": user.username, "email": user.email},
+        "access_token": create_token(user["email"]),
+        "token_type":   "bearer",
+        "user":         {"id": user["id"], "username": user["username"], "email": user["email"]},
     }
 
 
 @app.post("/auth/login", response_model=Token)
-def login(data: UserLogin, db: Session = Depends(get_db)):
-    """Login with email + password"""
-    user = db.query(models.User).filter(models.User.email == data.email.lower().strip()).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+def login(data: UserLogin):
+    user = users_db.get(data.email.lower().strip())
+    if not user or not verify_password(data.password, user["hashed_password"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-
     return {
-        "access_token": create_token(user.email),
-        "token_type": "bearer",
-        "user": {"id": user.id, "username": user.username, "email": user.email},
+        "access_token": create_token(user["email"]),
+        "token_type":   "bearer",
+        "user":         {"id": user["id"], "username": user["username"], "email": user["email"]},
     }
 
 
 @app.get("/auth/me", response_model=UserOut)
-def get_me(current_user: models.User = Depends(get_current_user)):
+def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
 
 
 # ── Todos (protected) ─────────────────────────────────────────
 
 @app.get("/todos", response_model=List[TodoOut])
-def get_todos(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    return db.query(models.Todo).filter(models.Todo.user_id == current_user.id).all()
+def get_todos(current_user: dict = Depends(get_current_user)):
+    return [t for t in todos if t["user_id"] == current_user["id"]]
 
 
 @app.post("/todos", response_model=TodoOut, status_code=201)
-def create_todo(
-    todo_data: TodoCreate,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    todo = models.Todo(
-        id=str(__import__('uuid').uuid4()),
-        title=todo_data.title,
-        description=todo_data.description,
-        completed=False,
-        user_id=current_user.id,
-    )
-    db.add(todo)
-    db.commit()
-    db.refresh(todo)
+def create_todo(data: TodoCreate, current_user: dict = Depends(get_current_user)):
+    todo = {
+        "id":          str(uuid.uuid4()),
+        "title":       data.title,
+        "description": data.description,
+        "completed":   False,
+        "user_id":     current_user["id"],
+    }
+    todos.append(todo)
     return todo
 
 
 @app.put("/todos/{todo_id}", response_model=TodoOut)
-def update_todo(
-    todo_id: str,
-    update_data: TodoUpdate,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    todo = db.query(models.Todo).filter(
-        models.Todo.id == todo_id,
-        models.Todo.user_id == current_user.id
-    ).first()
-    if not todo:
-        raise HTTPException(status_code=404, detail="Todo not found.")
-
-    for field, value in update_data.model_dump(exclude_unset=True).items():
-        setattr(todo, field, value)
-    db.commit()
-    db.refresh(todo)
-    return todo
+def update_todo(todo_id: str, data: TodoUpdate, current_user: dict = Depends(get_current_user)):
+    for todo in todos:
+        if todo["id"] == todo_id and todo["user_id"] == current_user["id"]:
+            todo.update(data.model_dump(exclude_unset=True))
+            return todo
+    raise HTTPException(status_code=404, detail="Todo not found.")
 
 
 @app.delete("/todos/{todo_id}", status_code=204)
-def delete_todo(
-    todo_id: str,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    todo = db.query(models.Todo).filter(
-        models.Todo.id == todo_id,
-        models.Todo.user_id == current_user.id
-    ).first()
-    if not todo:
+def delete_todo(todo_id: str, current_user: dict = Depends(get_current_user)):
+    global todos
+    before = len(todos)
+    todos = [t for t in todos if not (t["id"] == todo_id and t["user_id"] == current_user["id"])]
+    if len(todos) == before:
         raise HTTPException(status_code=404, detail="Todo not found.")
-    db.delete(todo)
-    db.commit()
-    return None
 
 
 if __name__ == "__main__":
