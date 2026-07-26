@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 import uuid
 
 # ── Security ──────────────────────────────────────────────────
@@ -17,7 +17,7 @@ SECRET_KEY         = "batcomputer-gotham-2024-ultra-secret-key-xK9mP2nQ"
 ALGORITHM          = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7   # 7 days
 
-pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=4)
+pwd_context   = None  # not used — using bcrypt directly
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # ── In-memory storage ─────────────────────────────────────────
@@ -100,10 +100,10 @@ class TodoOut(BaseModel):
 # ── Auth helpers ──────────────────────────────────────────────
 
 def hash_password(p: str) -> str:
-    return pwd_context.hash(p)
+    return bcrypt.hashpw(p.encode(), bcrypt.gensalt(rounds=4)).decode()
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 def create_token(email: str) -> str:
     exp = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
