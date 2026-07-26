@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, Loader2, CheckCircle2, ListTodo, ShieldAlert, X } from 'lucide-react'
-import { getTodos, createTodo, updateTodo, deleteTodo } from './api'
+import { getTodos, createTodo, updateTodo, deleteTodo, uploadVoiceNote } from './api'
 import { useAuth } from './context/AuthContext'
 import TodoForm    from './components/TodoForm'
 import TodoItem    from './components/TodoItem'
@@ -52,7 +52,7 @@ function StatCard({ label, value, Icon, accent }) {
    MAIN APP
 ════════════════════════════════════════════ */
 export default function App() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, avatar, loading: authLoading } = useAuth()
 
   const [todos,   setTodos]   = useState([])
   const [loading, setLoading] = useState(false)
@@ -87,6 +87,15 @@ export default function App() {
       const t = await createTodo(title, desc)
       setTodos(p => [t, ...p])
     } catch { setError('Failed to add mission.') }
+  }
+
+  const handleVoiceNote = async (audioBlob, title, description) => {
+    // Create todo first, then attach voice note
+    try {
+      const t = await createTodo(title || 'Voice Note', description || null)
+      setTodos(p => [{ ...t, has_voice_note: true }, ...p])
+      await uploadVoiceNote(t.id, audioBlob)
+    } catch { setError('Failed to save voice note.') }
   }
 
   const handleToggle = async (id, completed) => {
@@ -156,7 +165,7 @@ export default function App() {
 
             <div style={{ position: 'relative', marginBottom: 12 }}>
               <img
-                src="/images/batman-avatar.jpg"
+                src={avatar || "/images/batman-avatar.jpg"}
                 alt="Batman"
                 style={{
                   width: 100, height: 100, objectFit: 'cover', objectPosition: 'center top',
@@ -238,7 +247,7 @@ export default function App() {
           )}
 
           {/* ── FORM ── */}
-          <TodoForm onAdd={handleAdd} />
+          <TodoForm onAdd={handleAdd} onVoiceNote={handleVoiceNote} />
 
           {/* ── FILTERS ── */}
           {total > 0 && (

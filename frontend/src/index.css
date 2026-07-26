@@ -816,3 +816,278 @@ html.light .hero-overlay {
   0%,100% { transform: scaleY(1); opacity: 0.5; }
   50%     { transform: scaleY(2); opacity: 1; }
 }
+
+/* ── Avatar upload button ── */
+.avatar-upload-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #000;
+  border: 2px solid var(--card);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 2;
+}
+.avatar-upload-btn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  transform: scale(1.1);
+}
+.avatar-upload-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
+/* ════════════════════════════════════════════
+   VOICE RECORDER (in TodoForm)
+════════════════════════════════════════════ */
+.voice-recorder {
+  width: 100%;
+}
+
+/* Idle mic button */
+.voice-mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 7px 14px;
+  color: var(--text-mid);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.voice-mic-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(245,197,24,0.15);
+}
+
+/* Recording bar */
+.voice-recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 24px;
+  padding: 8px 14px;
+  animation: slideUp 0.2s ease;
+}
+
+/* Pulsing red dot */
+.voice-rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  flex-shrink: 0;
+  animation: recPulse 1s ease-in-out infinite;
+}
+@keyframes recPulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Waveform container */
+.voice-waveform {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+}
+
+/* Individual bar */
+.voice-bar {
+  width: 3px;
+  background: #ef4444;
+  border-radius: 2px;
+  transition: height 0.05s ease;
+  min-height: 3px;
+}
+
+.voice-duration {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--text-mid);
+  min-width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Stop button */
+.voice-stop-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.voice-stop-btn:hover { transform: scale(1.1); }
+
+/* Preview bar */
+.voice-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 8px 12px;
+  animation: slideUp 0.2s ease;
+}
+
+.voice-discard-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #ef4444;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.voice-discard-btn:hover { background: rgba(239,68,68,0.2); }
+
+.voice-play-btn {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #000;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.voice-play-btn:hover { background: var(--accent-dim); }
+
+.voice-progress-wrap {
+  flex: 1;
+  position: relative;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.voice-static-waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 32px;
+}
+
+.voice-progress-line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  transition: width 0.1s linear;
+  pointer-events: none;
+}
+
+.voice-send-btn {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #000;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.voice-send-btn:hover { background: var(--accent-dim); transform: scale(1.1); }
+
+
+/* ════════════════════════════════════════════
+   VOICE NOTE PLAYER (in TodoItem)
+════════════════════════════════════════════ */
+.voice-note-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245,197,24,0.04);
+  border: 1px solid rgba(245,197,24,0.15);
+  border-radius: 20px;
+  padding: 7px 12px;
+}
+
+.vnp-play-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #000;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.vnp-play-btn:hover:not(:disabled) { background: var(--accent-dim); }
+.vnp-play-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.vnp-waveform-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.vnp-bar {
+  width: 3px;
+  border-radius: 2px;
+  min-height: 3px;
+  transition: background 0.1s;
+}
+
+.vnp-time {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--text-lo);
+  min-width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.vnp-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-lo);
+  cursor: pointer;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+.vnp-delete-btn:hover { color: var(--danger); }

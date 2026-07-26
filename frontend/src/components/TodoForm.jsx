@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
-import { Zap, AlignLeft, Plus, Mic, MicOff, Loader2 } from 'lucide-react'
+import { Zap, AlignLeft, Plus, Mic, Loader2 } from 'lucide-react'
+import VoiceRecorder from './VoiceRecorder'
 
-export default function TodoForm({ onAdd }) {
-  const [title, setTitle]       = useState('')
-  const [description, setDesc]  = useState('')
+export default function TodoForm({ onAdd, onVoiceNote }) {
+  const [title, setTitle]         = useState('')
+  const [description, setDesc]    = useState('')
   const [listening, setListening] = useState(false)
   const [voiceError, setVoiceError] = useState(null)
   const recognitionRef = useRef(null)
@@ -16,51 +17,31 @@ export default function TodoForm({ onAdd }) {
     setDesc('')
   }
 
-  const startVoice = () => {
+  // Voice-to-text (fills input)
+  const startVoiceToText = () => {
     setVoiceError(null)
-
-    // Check browser support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setVoiceError('Voice input not supported in this browser. Try Chrome.')
-      return
-    }
+    if (!SpeechRecognition) { setVoiceError('Not supported in this browser. Try Chrome.'); return }
 
-    if (listening) {
-      // Stop listening
-      recognitionRef.current?.stop()
-      setListening(false)
-      return
-    }
+    if (listening) { recognitionRef.current?.stop(); setListening(false); return }
 
     const recognition = new SpeechRecognition()
     recognition.lang = 'en-US'
     recognition.interimResults = false
-    recognition.maxAlternatives = 1
     recognitionRef.current = recognition
 
-    recognition.onstart = () => setListening(true)
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript
-      // If title empty, fill title. Otherwise append to description.
-      if (!title.trim()) {
-        setTitle(transcript)
-      } else {
-        setDesc(transcript)
-      }
+    recognition.onstart  = () => setListening(true)
+    recognition.onresult = (e) => {
+      const t = e.results[0][0].transcript
+      if (!title.trim()) setTitle(t)
+      else setDesc(t)
       setListening(false)
     }
-
-    recognition.onerror = (event) => {
-      if (event.error !== 'no-speech') {
-        setVoiceError(`Voice error: ${event.error}`)
-      }
+    recognition.onerror = (e) => {
+      if (e.error !== 'no-speech') setVoiceError(`Mic error: ${e.error}`)
       setListening(false)
     }
-
     recognition.onend = () => setListening(false)
-
     recognition.start()
   }
 
@@ -68,7 +49,7 @@ export default function TodoForm({ onAdd }) {
     <form onSubmit={handleSubmit} className="mb-8">
       <div className="card p-5">
 
-        {/* Title row with mic button */}
+        {/* Title + voice-to-text mic */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
           <Zap size={17} style={{ color: 'var(--accent)', flexShrink: 0 }} />
           <input
@@ -79,29 +60,19 @@ export default function TodoForm({ onAdd }) {
             className="input-line"
             required
           />
-          {/* Voice mic button */}
           <button
             type="button"
-            onClick={startVoice}
+            onClick={startVoiceToText}
             className={`mic-btn ${listening ? 'mic-active' : ''}`}
-            title={listening ? 'Stop listening' : 'Speak your mission'}
-            aria-label="Voice input"
+            title={listening ? 'Stop' : 'Speak to fill title'}
+            aria-label="Voice to text"
           >
-            {listening
-              ? <Loader2 size={15} className="spin" />
-              : <Mic size={15} />
-            }
+            {listening ? <Loader2 size={15} className="spin" /> : <Mic size={15} />}
           </button>
         </div>
 
-        {/* Voice error */}
-        {voiceError && (
-          <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 12, paddingLeft: 30 }}>
-            {voiceError}
-          </p>
-        )}
+        {voiceError && <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 10, paddingLeft: 30 }}>{voiceError}</p>}
 
-        {/* Listening indicator */}
         {listening && (
           <div className="voice-listening">
             <span className="voice-dot" />
@@ -112,15 +83,20 @@ export default function TodoForm({ onAdd }) {
         )}
 
         {/* Description */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, paddingLeft: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, paddingLeft: 2 }}>
           <AlignLeft size={14} style={{ color: 'var(--text-lo)', flexShrink: 0 }} />
           <input
             type="text"
-            placeholder="Details (optional) — or speak after title..."
+            placeholder="Details (optional)..."
             value={description}
             onChange={e => setDesc(e.target.value)}
             className="input-sub"
           />
+        </div>
+
+        {/* Voice note recorder */}
+        <div style={{ marginBottom: 16 }}>
+          <VoiceRecorder onSend={(blob) => onVoiceNote && onVoiceNote(blob, title, description)} />
         </div>
 
         {/* Submit */}

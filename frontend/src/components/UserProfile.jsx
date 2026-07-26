@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { User, Mail, LogOut, Shield, X, ChevronDown } from 'lucide-react'
+import { User, Mail, LogOut, Shield, X, ChevronDown, Camera, Loader2 } from 'lucide-react'
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function BatLogo({ style = {} }) {
   return (
@@ -19,92 +21,134 @@ function BatLogo({ style = {} }) {
 }
 
 export default function UserProfile({ todoCount = 0, doneCount = 0 }) {
-  const { user, logout } = useAuth()
-  const [open, setOpen] = useState(false)
+  const { user, token, avatar, setAvatar, logout } = useAuth()
+  const [open, setOpen]           = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(null)
+  const fileInputRef = useRef(null)
 
   if (!user) return null
 
-  // Generate initials avatar color from username
   const initials = user.username.slice(0, 2).toUpperCase()
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setUploadError(null)
+    setUploading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch(`${BASE_URL}/auth/avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail || 'Upload failed')
+      }
+
+      const data = await res.json()
+      setAvatar(data.avatar)           // update context + localStorage
+    } catch (err) {
+      setUploadError(err.message)
+    } finally {
+      setUploading(false)
+      // Reset input so same file can be re-selected
+      e.target.value = ''
+    }
+  }
 
   return (
     <div style={{ position: 'relative' }}>
 
       {/* ── Trigger button ── */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="profile-trigger"
-        aria-label="Open profile"
-      >
+      <button onClick={() => setOpen(o => !o)} className="profile-trigger" aria-label="Open profile">
+        {/* Avatar — photo or initials */}
         <div className="profile-avatar-small">
-          {initials}
+          {avatar
+            ? <img src={avatar} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            : initials
+          }
         </div>
         <span className="profile-trigger-name">{user.username}</span>
-        <ChevronDown size={14} style={{
-          color: 'var(--text-lo)',
-          transition: 'transform 0.2s',
-          transform: open ? 'rotate(180deg)' : 'rotate(0deg)'
-        }} />
+        <ChevronDown size={14} style={{ color: 'var(--text-lo)', transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }} />
       </button>
 
       {/* ── Dropdown panel ── */}
       {open && (
         <>
-          {/* Backdrop */}
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-            onClick={() => setOpen(false)}
-          />
+          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
 
-          {/* Panel */}
           <div className="profile-panel slide-up">
 
             {/* Close */}
-            <button
-              onClick={() => setOpen(false)}
-              className="profile-close"
-              aria-label="Close"
-            >
+            <button onClick={() => setOpen(false)} className="profile-close" aria-label="Close">
               <X size={14} />
             </button>
 
-            {/* Avatar + name */}
+            {/* Avatar + upload ── */}
             <div style={{ textAlign: 'center', paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
-              <div className="profile-avatar-large">
-                {initials}
-                <BatLogo style={{
-                  position: 'absolute',
-                  bottom: -4,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: 32,
-                  height: 16,
-                  color: 'var(--accent)',
-                }} />
+
+              {/* Avatar with camera overlay */}
+              <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto' }}>
+                <div className="profile-avatar-large">
+                  {avatar
+                    ? <img src={avatar} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    : <>
+                        {initials}
+                        <BatLogo style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', width: 32, height: 16, color: 'var(--accent)' }} />
+                      </>
+                  }
+                </div>
+
+                {/* Camera button overlay */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="avatar-upload-btn"
+                  title="Upload profile picture"
+                  aria-label="Upload profile picture"
+                >
+                  {uploading
+                    ? <Loader2 size={12} className="spin" />
+                    : <Camera size={12} />
+                  }
+                </button>
               </div>
-              <h3 style={{
-                fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: 22,
-                letterSpacing: 3,
-                color: 'var(--text-hi)',
-                marginTop: 12,
-              }}>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
+
+              {/* Upload error */}
+              {uploadError && (
+                <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6 }}>{uploadError}</p>
+              )}
+
+              {/* Upload hint */}
+              {!uploadError && (
+                <p style={{ fontSize: 10, color: 'var(--text-lo)', marginTop: 6, letterSpacing: 1 }}>
+                  {uploading ? 'Uploading...' : 'Click camera to change photo'}
+                </p>
+              )}
+
+              <h3 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 3, color: 'var(--text-hi)', marginTop: 10 }}>
                 {user.username}
               </h3>
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                background: 'rgba(245,197,24,0.08)',
-                border: '1px solid rgba(245,197,24,0.2)',
-                borderRadius: 20,
-                padding: '3px 10px',
-                marginTop: 6,
-              }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(245,197,24,0.08)', border: '1px solid rgba(245,197,24,0.2)', borderRadius: 20, padding: '3px 10px', marginTop: 6 }}>
                 <Shield size={10} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 10, letterSpacing: 2, color: 'var(--accent)', fontFamily: "'Bebas Neue', sans-serif" }}>
-                  GOTHAM OPERATIVE
-                </span>
+                <span style={{ fontSize: 10, letterSpacing: 2, color: 'var(--accent)', fontFamily: "'Bebas Neue', sans-serif" }}>GOTHAM OPERATIVE</span>
               </div>
             </div>
 
@@ -143,10 +187,7 @@ export default function UserProfile({ todoCount = 0, doneCount = 0 }) {
             </div>
 
             {/* Logout */}
-            <button
-              onClick={() => { logout(); setOpen(false) }}
-              className="profile-logout-btn"
-            >
+            <button onClick={() => { logout(); setOpen(false) }} className="profile-logout-btn">
               <LogOut size={14} />
               Sign Out of Batcomputer
             </button>

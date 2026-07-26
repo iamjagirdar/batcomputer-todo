@@ -114,3 +114,39 @@ export const updateTodo = async (id, updates) => {
 export const deleteTodo = async (id) => {
   await api.delete(`/todos/${id}`)
 }
+
+
+// ============================================================
+// VOICE NOTE API
+// ============================================================
+
+/**
+ * Upload a voice note for a todo
+ * POST /todos/:id/voice
+ */
+export const uploadVoiceNote = async (todoId, audioBlob) => {
+  const formData = new FormData()
+  // Use .webm extension — most common from MediaRecorder
+  formData.append('file', audioBlob, 'voice-note.webm')
+  const { data } = await api.post(`/todos/${todoId}/voice`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return data
+}
+
+/**
+ * Get voice note for a todo
+ * GET /todos/:id/voice
+ */
+export const getVoiceNote = async (todoId) => {
+  const { data } = await api.get(`/todos/${todoId}/voice`)
+  return data
+}
+
+/**
+ * Delete voice note for a todo
+ * DELETE /todos/:id/voice
+ */
+export const deleteVoiceNote = async (todoId) => {
+  await api.delete(`/todos/${todoId}/voice`)
+}

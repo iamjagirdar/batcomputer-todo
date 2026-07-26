@@ -2,7 +2,7 @@
 #  Batcomputer Todo API  — v4 with JWT Auth + In-Memory Storage
 # ============================================================
 
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import bcrypt
 import uuid
+import base64
 
 # ── Security ──────────────────────────────────────────────────
 SECRET_KEY         = "batcomputer-gotham-2024-ultra-secret-key-xK9mP2nQ"
@@ -21,8 +22,10 @@ pwd_context   = None  # not used — using bcrypt directly
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # ── In-memory storage ─────────────────────────────────────────
-users_db: dict       = {}   # { email: user_dict }
-todos:    List[dict] = []   # [ todo_dict, ... ]
+users_db:     dict       = {}   # { email: user_dict }
+todos:        List[dict] = []   # [ todo_dict, ... ]
+avatars:      dict       = {}   # { user_id: base64_string }
+voice_notes:  dict       = {}   # { todo_id: base64_audio_string }
 
 # ── App ───────────────────────────────────────────────────────
 app = FastAPI(title="Batcomputer API", version="4.0.0")
@@ -95,6 +98,7 @@ class TodoOut(BaseModel):
     description: Optional[str] = None
     completed: bool
     user_id: str
+    has_voice_note: bool = False
 
 
 # ── Auth helpers ──────────────────────────────────────────────
@@ -181,21 +185,57 @@ def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
 
 
+@app.post("/auth/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload a profile picture — stored as base64"""
+    # Validate file type
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP or GIF images allowed.")
+
+    # Read and limit size to 2MB
+    contents = await file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be under 2MB.")
+
+    # Convert to base64 data URL
+    b64 = base64.b64encode(contents).decode("utf-8")
+    data_url = f"data:{file.content_type};base64,{b64}"
+
+    # Store in memory
+    avatars[current_user["id"]] = data_url
+
+    return {"avatar": data_url}
+
+
+@app.get("/auth/avatar")
+def get_avatar(current_user: dict = Depends(get_current_user)):
+    """Get current user's avatar"""
+    avatar = avatars.get(current_user["id"])
+    return {"avatar": avatar}
+
+
 # ── Todos (protected) ─────────────────────────────────────────
 
 @app.get("/todos", response_model=List[TodoOut])
 def get_todos(current_user: dict = Depends(get_current_user)):
-    return [t for t in todos if t["user_id"] == current_user["id"]]
+    user_todos = [t for t in todos if t["user_id"] == current_user["id"]]
+    for t in user_todos:
+        t["has_voice_note"] = t["id"] in voice_notes
+    return user_todos
 
 
 @app.post("/todos", response_model=TodoOut, status_code=201)
 def create_todo(data: TodoCreate, current_user: dict = Depends(get_current_user)):
     todo = {
-        "id":          str(uuid.uuid4()),
-        "title":       data.title,
-        "description": data.description,
-        "completed":   False,
-        "user_id":     current_user["id"],
+        "id":             str(uuid.uuid4()),
+        "title":          data.title,
+        "description":    data.description,
+        "completed":      False,
+        "user_id":        current_user["id"],
+        "has_voice_note": False,
     }
     todos.append(todo)
     return todo
@@ -217,6 +257,64 @@ def delete_todo(todo_id: str, current_user: dict = Depends(get_current_user)):
     todos = [t for t in todos if not (t["id"] == todo_id and t["user_id"] == current_user["id"])]
     if len(todos) == before:
         raise HTTPException(status_code=404, detail="Todo not found.")
+    # Also delete voice note if exists
+    voice_notes.pop(todo_id, None)
+
+
+# ── Voice Notes ───────────────────────────────────────────────
+
+@app.post("/todos/{todo_id}/voice")
+async def upload_voice_note(
+    todo_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload a voice note for a todo"""
+    # Verify todo belongs to user
+    todo = next((t for t in todos if t["id"] == todo_id and t["user_id"] == current_user["id"]), None)
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found.")
+
+    # Accept audio files only
+    if not file.content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="Only audio files are allowed.")
+
+    # Limit to 5MB
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Voice note must be under 5MB.")
+
+    b64 = base64.b64encode(contents).decode("utf-8")
+    data_url = f"data:{file.content_type};base64,{b64}"
+    voice_notes[todo_id] = data_url
+    todo["has_voice_note"] = True
+
+    return {"todo_id": todo_id, "has_voice_note": True}
+
+
+@app.get("/todos/{todo_id}/voice")
+def get_voice_note(todo_id: str, current_user: dict = Depends(get_current_user)):
+    """Get the voice note for a todo"""
+    todo = next((t for t in todos if t["id"] == todo_id and t["user_id"] == current_user["id"]), None)
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found.")
+
+    audio = voice_notes.get(todo_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="No voice note for this todo.")
+
+    return {"todo_id": todo_id, "audio": audio}
+
+
+@app.delete("/todos/{todo_id}/voice", status_code=204)
+def delete_voice_note(todo_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete the voice note for a todo"""
+    todo = next((t for t in todos if t["id"] == todo_id and t["user_id"] == current_user["id"]), None)
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found.")
+    voice_notes.pop(todo_id, None)
+    todo["has_voice_note"] = False
+    return None
 
 
 if __name__ == "__main__":
